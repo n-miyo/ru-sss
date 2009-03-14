@@ -1,0 +1,12 @@
+#!/usr/bin/env ruby
+
+require 'UPnP/control/device/system_stat_server'
+
+sss = UPnP::Control::Device::SystemStatServer.search 
+
+if sss.empty? then
+  puts 'No SystemStatServer found'
+else
+  sss.each do |s| s.print_free_size end
+end
+

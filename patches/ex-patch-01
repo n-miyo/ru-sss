@@ -1,0 +1,25 @@
+diff --git a/lib/UPnP/SSDP.rb b/lib/UPnP/SSDP.rb
+index 2a889ba..230f5d5 100644
+--- a/lib/UPnP/SSDP.rb
++++ b/lib/UPnP/SSDP.rb
+@@ -585,6 +585,11 @@ class UPnP::SSDP
+     socket = UDPSocket.new
+ 
+     socket.setsockopt Socket::IPPROTO_IP, Socket::IP_ADD_MEMBERSHIP, membership
++    begin
++      socket.setsockopt Socket::SOL_SOCKET, Socket::SO_REUSEPORT, true
++    rescue
++      socket.setsockopt Socket::SOL_SOCKET, Socket::SO_REUSEADDR, true
++    end
+ 
+     socket.bind '0.0.0.0', @port
+ 
+@@ -599,7 +604,7 @@ class UPnP::SSDP
+ 
+     socket = UDPSocket.new
+ 
+-    socket.setsockopt Socket::IPPROTO_IP, Socket::IP_MULTICAST_LOOP, "\000"
++    socket.setsockopt Socket::IPPROTO_IP, Socket::IP_MULTICAST_LOOP, '\001'
+     socket.setsockopt Socket::IPPROTO_IP, Socket::IP_MULTICAST_TTL, ttl
+     socket.setsockopt Socket::IPPROTO_IP, Socket::IP_TTL, ttl
+ 

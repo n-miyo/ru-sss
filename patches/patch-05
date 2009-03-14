@@ -1,0 +1,13 @@
+diff --git a/lib/UPnP/SSDP.rb b/lib/UPnP/SSDP.rb
+index 2a889ba..4eb2b83 100644
+--- a/lib/UPnP/SSDP.rb
++++ b/lib/UPnP/SSDP.rb
+@@ -684,7 +684,7 @@ class UPnP::SSDP
+ 
+     responses = []
+ 
+-    unless @queue.empty?
++    until @queue.empty?
+       r = @queue.pop
+       responses << r if UPnP::SSDP::Response === r
+     end

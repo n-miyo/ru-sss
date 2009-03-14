@@ -1,0 +1,75 @@
+diff --git a/lib/UPnP/control/device.rb b/lib/UPnP/control/device.rb
+index e95b0e1..7e79ddf 100644
+--- a/lib/UPnP/control/device.rb
++++ b/lib/UPnP/control/device.rb
+@@ -131,6 +131,23 @@ class UPnP::Control::Device
+   end
+ 
+   ##
++  # Create new device from specified description and url.
++
++  def self.create2(description, url)
++    type = description.elements['deviceType'].text.strip
++    klass_name = type.sub(/#{UPnP::DEVICE_SCHEMA_PREFIX}:([^:]+):.*/, '\1')
++
++    begin
++      klass = const_get klass_name
++    rescue NameError
++      klass = const_set klass_name, Class.new(self)
++      klass.const_set :URN_1, "#{UPnP::DEVICE_SCHEMA_PREFIX}:#{klass.name}:1"
++    end
++
++    klass.new description, url
++  end
++
++  ##
+   # Searches for devices using +ssdp+ and instantiates Device objects for
+   # them.  By calling this method on a subclass only devices of that type will
+   # be returned.
+@@ -200,7 +217,7 @@ class UPnP::Control::Device
+     @model_number = model_number.text.strip if model_number
+ 
+     model_url = description.elements['modelURL']
+-    @model_url = URI.parse model_url.text.strip if model_url
++    @model_url = URI.parse model_url.text.strip if model_url && model_url.text
+ 
+     @name = description.elements['UDN'].text.strip
+ 
+@@ -214,10 +231,10 @@ class UPnP::Control::Device
+     @type = description.elements['deviceType'].text.strip
+ 
+     upc = description.elements['UPC']
+-    @upc = upc.text.strip if upc
++    @upc = upc.text.strip if upc && upc.text
+ 
+     description.each_element 'deviceList/device' do |sub_device_description|
+-      sub_device = UPnP::Control::Device.new sub_device_description, @url
++      sub_device = UPnP::Control::Device.create2 sub_device_description, @url
+       @sub_devices << sub_device
+     end
+ 
+diff --git a/lib/UPnP/device.rb b/lib/UPnP/device.rb
+index 3ceb3e1..8aed255 100644
+--- a/lib/UPnP/device.rb
++++ b/lib/UPnP/device.rb
+@@ -404,6 +404,7 @@ class UPnP::Device
+     end
+ 
+     sub_device = UPnP::Device.new(type, friendly_name, self, &block)
++    yield sub_device if block_given?
+     @sub_devices << sub_device
+     sub_device
+   end
+diff --git a/lib/UPnP/service.rb b/lib/UPnP/service.rb
+index cf72800..deac90e 100644
+--- a/lib/UPnP/service.rb
++++ b/lib/UPnP/service.rb
+@@ -216,7 +216,7 @@ class UPnP::Service < SOAP::RPC::StandaloneServer
+   def description(xml)
+     xml.service do
+       xml.serviceType type_urn
+-      xml.serviceId   "urn:upnp-org:serviceId:#{root_device.service_id self}"
++      xml.serviceId   "urn:upnp-org:serviceId:#{@device.service_id self}"
+       xml.SCPDURL     scpd_url
+       xml.controlURL  control_url
+       xml.eventSubURL event_sub_url

@@ -1,0 +1,25 @@
+diff --git a/lib/UPnP/control/service.rb b/lib/UPnP/control/service.rb
+index e07a568..fb1f616 100644
+--- a/lib/UPnP/control/service.rb
++++ b/lib/UPnP/control/service.rb
+@@ -259,7 +259,7 @@ class UPnP::Control::Service
+ 
+     @actions.each do |name, arguments|
+       soapaction = "#{@type}##{name}"
+-      qname = XSD::QName.new @type, soapaction
++      qname = XSD::QName.new @type, name
+ 
+       # TODO map ranges, enumerations
+       arguments = arguments.map do |direction, arg_name, variable|
+@@ -297,8 +297,9 @@ class UPnP::Control::Service
+       fault_string = e.faultstring.data
+ 
+       detail = e.detail[fault_string]
+-      code = detail['errorCode'].to_i
+-      description = detail['errorDescription']
++      code = detail['errorCode'].to_i if detail
++      description = detail['errorDescription'] if detail
++      description ||= e.detail
+ 
+       backtrace.first.gsub!(/:(\d+):in `([^']+)'/) do
+         line = $1.to_i - 2

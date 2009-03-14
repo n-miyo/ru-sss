@@ -1,0 +1,13 @@
+diff --git a/Rakefile b/Rakefile
+index ff3e6dd..f6f2c9d 100644
+--- a/Rakefile
++++ b/Rakefile
+@@ -2,7 +2,7 @@
+ 
+ require 'rubygems'
+ require 'hoe'
+-require './lib/upnp.rb'
++require './lib/UPnP.rb'
+ 
+ Hoe.new('UPnP', UPnP::VERSION) do |p|
+   p.rubyforge_name = 'seattlerb'

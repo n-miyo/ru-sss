@@ -1,0 +1,144 @@
+------------------------------------------------------------
+			  00README
+
+  $Id$
+------------------------------------------------------------
+
+[これはなに]
+
+Ruby UPnP-1.1.0 を使ったデバイス/コントロールポイントのサン
+プルコード、ならびに、UPnP-1.1.0 に対するパッチです。詳しく
+は、以下の blog を参照してください。
+
+  <URL:http://blogger.tempus.org/>
+
+Ruby UPnP は Eric Hodel さんによって作成されました。詳しくは、
+以下をご覧ください。
+
+  <URL:http://seattlerb.rubyforge.org/UPnP/>
+
+Ruby UPnP の tar ball/gem は以下から取得可能です。
+
+  <URL:http://rubyforge.org/projects/seattlerb/>
+
+
+[サンプルコード]
+
+UPnP-1.1.0 ライブラリの使い方を示すためのサンプルプログラムで
+す。該当ファイルシステムのディスク容量を取得サービスを提供す
+るデバイスと、それを利用するコントロールポイントからなります。
+
+Ruby UPnP のRdocドキュメント、ならびに Ruby UPnP-IGD や
+MediaServer のコードを参考させて頂きました。
+
+
+[パッチ]
+
+パッチは2種類あります。
+
+1. UPnP-1.1.0 の機能を修正するもの
+
+  patches/patch-* が該当します。いずれも、Ruby UPnP-1.1.0 の
+  tracker へ登録済みのものです。
+
+  <URL:http://rubyforge.org/search/?type_of_search=trackers&group_id=1513&words=UPnP&Search=%E6%A4%9C%E7%B4%A2>
+
+  サンプルコードは、このパッチが適用されていることを前提に書かれています。
+
+2. UPnP-1.1.0 の機能を一時的に変更するもの
+
+  patches/ex-patch-* が該当します。一時的な機能変更のための
+  パッチです。必須ではありません。
+
+  ex-patch-01:
+    - デバイスとコントロールポイントを同じシステム上で動作さ
+      せるためのパッチ。
+
+
+パッチは以下の手順で適用することが出来ます。
+
+  1) UPnP-1.1.0.tgz を取得し、展開します。
+
+    % curl -O -L http://rubyforge.org/frs/download.php/40190/UPnP-1.1.0.tgz
+    % tar zxvf UPnP-1.1.0.tgz
+
+  2) patch を当てます
+
+    % for i in patches/patch-*; do (cd UPnP-1.1.0; patch -p1 < ../$i); done
+    (必要に応じて次のコマンドを実行)
+    % for i in patches/ex-patch-*; do (cd UPnP-1.1.0; patch -p1 < ../$i); done
+
+  3) 必要に応じて gem として install します。バージョンを変
+     えておくと正式配布物と区別がついてよいかもしれません。
+
+    % cd UPnP-1.1.0
+    % vi lib/UPnP.rb(必要に応じて VERSION を変更します)
+    % rake gem # (エラーになった場合には、まず gem update --system を実行)
+    % sudo gem uninstall UPnP(既に UPnP を gem で install してある場合)
+    % sudo gem install pkg/UPnP-(変更したバージョン).gem
+
+
+
+[使い方]
+
+パッチの適用された UPnP ライブラリを gem としてインストールし
+ていない場合には、soap4r と builder の gem がインストールされ
+ていることを確認しておきましょう。
+
+    % sudo gem install soap4r
+    % sudo gem install builder
+
+RUBYLIB 環境変数を適切に設定し、サンプルコードの lib ディレク
+トリを加えておきましょう(gem で install していない場合には、
+UPnPライブラリも追加しましょう)。
+
+デバイス起動方法は、以下の通りです。デバイスとしてのホスト名
+を指定するには -n を指定します。
+
+    % bin/upnp_system_stat_server -n host_name
+
+コントロールポイントの起動方法は以下の通りです。M-SEARCH でデ
+バイスを探し出し、'/' のディスク容量を Mbyte 単位で表示します。
+
+    % bin/upnp_sss
+
+
+[連絡先]
+
+  E-mail: n-miyo@tempus.org(MIYOKAWA, Nobuyoshi)
+  WebSite:
+    <URL:http://blogger.tempus.org/>
+    <URL:http://www.tempus.org/>
+
+
+[ライセンス]
+
+Copyright (c) 2009, MIYOKAWA, Nobuyoshi
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+  1. Redistributions of source code must retain the above copyright
+     notice, this list of conditions and the following disclaimer.
+  2. Redistributions in binary form must reproduce the above copyright
+     notice, this list of conditions and the following disclaimer in the
+     documentation and/or other materials provided with the distribution.
+  3. Neither the name of the authors nor the names of its
+     contributors may be used to endorse or promote products derived
+     from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHORS ''AS IS'' AND ANY EXPRESS
+OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+; EOF

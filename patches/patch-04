@@ -1,0 +1,340 @@
+diff --git a/lib/UPnP/SSDP.rb b/lib/UPnP/SSDP.rb
+index e27da6a..2a889ba 100644
+--- a/lib/UPnP/SSDP.rb
++++ b/lib/UPnP/SSDP.rb
+@@ -281,26 +281,32 @@ class UPnP::SSDP
+ 
+     attr_reader :wait_time
+ 
++    attr_reader :dst_address
++
++    attr_reader :dst_port
++
+     ##
+     # Creates a new Search by parsing the text in +response+
+ 
+-    def self.parse(response)
++    def self.parse(response, dst_address, dst_port)
+       response =~ /^mx:\s*(\d+)/i
+       wait_time = Integer $1
+ 
+       response =~ /^st:\s*(\S*)/i
+       target = $1.strip
+ 
+-      new Time.now, target, wait_time
++      new Time.now, target, wait_time, dst_address, dst_port
+     end
+ 
+     ##
+     # Creates a new Search
+ 
+-    def initialize(date, target, wait_time)
++    def initialize(date, target, wait_time, dst_address, dst_port)
+       @date = date
+       @target = target
+       @wait_time = wait_time
++      @dst_address = dst_address
++      @dst_port = dst_port
+     end
+ 
+     ##
+@@ -395,7 +401,8 @@ class UPnP::SSDP
+ 
+     @log = nil
+ 
+-    @listener = nil
++    @mlistener = nil
++    @ulistener = nil
+     @queue = Queue.new
+ 
+     @search_thread = nil
+@@ -406,7 +413,7 @@ class UPnP::SSDP
+   # Listens for M-SEARCH requests and advertises the requested services
+ 
+   def advertise(root_device, port, hosts)
+-    @socket ||= new_socket
++    open_sockets
+ 
+     @notify_thread = Thread.start do
+       loop do
+@@ -448,13 +455,15 @@ class UPnP::SSDP
+           devices.each do |d|
+             hosts.each do |host|
+               uri = "http://#{host}:#{port}/description"
+-              send_response uri, search.target, "#{d.name}::#{search.target}", d
++              send_response uri, search.target, "#{d.name}::#{search.target}",
++                            d, search.dst_address, search.dst_port
+             end
+           end
+         when 'upnp:rootdevice' then
+           hosts.each do |host|
+             uri = "http://#{host}:#{port}/description"
+-            send_response uri, search.target, search.target, root_device
++            send_response uri, search.target, search.target, root_device,
++                          search.dst_address, search.dst_port
+           end
+         else
+           warn "Unhandled target #{search.target}"
+@@ -467,14 +476,16 @@ class UPnP::SSDP
+   ensure
+     @queue.push :shutdown
+     stop_listening
+-    @notify_thread.kill
++    @notify_thread.kill if @notify_thread
++    @search_thread.kill if @search_thread
++    @notify_thread = nil
++    @search_thread = nil
+ 
+-    @socket.close if @socket and not @socket.closed?
+-    @socket = nil
++    close_sockets
+   end
+ 
+   def byebye(root_device, hosts)
+-    @socket ||= new_socket
++    open_sockets
+ 
+     hosts.each do |host|
+       send_notify_byebye 'upnp:rootdevice', root_device
+@@ -488,6 +499,8 @@ class UPnP::SSDP
+         send_notify_byebye s.type_urn, s
+       end
+     end
++  ensure
++    close_sockets
+   end
+ 
+   ##
+@@ -498,7 +511,7 @@ class UPnP::SSDP
+   # notifications received in that time.
+ 
+   def discover
+-    @socket ||= new_socket
++    open_sockets
+ 
+     listen
+ 
+@@ -517,8 +530,7 @@ class UPnP::SSDP
+     end
+   ensure
+     stop_listening
+-    @socket.close if @socket and not @socket.closed?
+-    @socket = nil
++    close_sockets
+   end
+ 
+   ##
+@@ -526,30 +538,34 @@ class UPnP::SSDP
+   # processing.  Requires a socket from search or discover.
+ 
+   def listen
+-    return @listener if @listener and @listener.alive?
+-
+-    @listener = Thread.start do
+-      loop do
+-        response, (family, port, hostname, address) = @socket.recvfrom 1024
++    return @mlistener if @mlistener and @mlistener.alive?
++    @mlistener = Thread.start { listen_ @msocket }
+ 
+-        begin
+-          adv = parse response
++    return @ulistener if @ulistener and @ulistener.alive?
++    @ulistener = Thread.start { listen_ @usocket }
++  end
+ 
+-          info = case adv
+-          when Notification then adv.type
+-          when Response     then adv.target
+-          when Search       then adv.target
+-          else                   'unknown'
+-          end
++  def listen_(sock)
++    loop do
++      response, (family, port, hostname, address) = sock.recvfrom 1024
+ 
+-          response =~ /\A(\S+)/
+-          log :debug, "SSDP recv #{$1} #{hostname}:#{port} #{info}"
++      begin
++        adv = parse response, address, port
+ 
+-          @queue << adv
+-        rescue
+-          warn $!.message
+-          warn $!.backtrace
++        info = case adv
++        when Notification then adv.type
++        when Response     then adv.target
++        when Search       then adv.target
++        else                   'unknown'
+         end
++
++        response =~ /\A(\S+)/
++        log :debug, "SSDP recv #{$1} #{hostname}:#{port} #{info}"
++
++        @queue << adv
++      rescue
++        warn $!.message
++        warn $!.backtrace
+       end
+     end
+   end
+@@ -561,35 +577,64 @@ class UPnP::SSDP
+   end
+ 
+   ##
+-  # Sets up a UDPSocket for multicast send and receive
++  # Sets up a UDPSocket for receiving multicast receive
+ 
+-  def new_socket
++  def new_msocket
+     membership = IPAddr.new(@broadcast).hton + IPAddr.new('0.0.0.0').hton
+-    ttl = [@ttl].pack 'i'
+ 
+     socket = UDPSocket.new
+ 
+     socket.setsockopt Socket::IPPROTO_IP, Socket::IP_ADD_MEMBERSHIP, membership
++
++    socket.bind '0.0.0.0', @port
++
++    socket
++  end
++
++  ##
++  # Sets up a UDPSocket for sending packets
++
++  def new_usocket
++    ttl = [@ttl].pack 'i'
++
++    socket = UDPSocket.new
++
+     socket.setsockopt Socket::IPPROTO_IP, Socket::IP_MULTICAST_LOOP, "\000"
+     socket.setsockopt Socket::IPPROTO_IP, Socket::IP_MULTICAST_TTL, ttl
+     socket.setsockopt Socket::IPPROTO_IP, Socket::IP_TTL, ttl
+ 
+-    socket.bind '0.0.0.0', @port
+-
+     socket
+   end
+ 
+   ##
++  # Open sockets
++
++  def open_sockets
++    @msocket ||= new_msocket
++    @usocket ||= new_usocket
++  end
++
++  ##
++  # Close sockets
++
++  def close_sockets
++    @msocket.close if @msocket and not @msocket.closed?
++    @msocket = nil
++    @usocket.close if @usocket and not @usocket.closed?
++    @usocket = nil
++  end
++
++  ##
+   # Returns a Notification, Response or Search created from +response+.
+ 
+-  def parse(response)
++  def parse(response, address, port)
+     case response
+     when /\ANOTIFY/ then
+       Notification.parse response
+     when /\AHTTP/ then
+       Response.parse response
+     when /\AM-SEARCH/ then
+-      Search.parse response
++      Search.parse response, address, port
+     else
+       raise Error, "Unknown response #{response[/\A.*$/]}"
+     end
+@@ -614,7 +659,7 @@ class UPnP::SSDP
+   # Supply <tt>"urn:..."</tt> to search for a URN.
+ 
+   def search(*targets)
+-    @socket ||= new_socket
++    open_sockets
+ 
+     if targets.empty? then
+       send_search 'ssdp:all'
+@@ -638,12 +683,16 @@ class UPnP::SSDP
+     sleep @timeout
+ 
+     responses = []
+-    responses << @queue.pop until @queue.empty?
++
++    unless @queue.empty?
++      r = @queue.pop
++      responses << r if UPnP::SSDP::Response === r
++    end
++
+     responses
+   ensure
+     stop_listening
+-    @socket.close if @socket and not @socket.closed?
+-    @socket = nil
++    close_sockets
+   end
+ 
+   ##
+@@ -674,7 +723,7 @@ USN: #{name}\r
+ 
+     log :debug, "SSDP sent NOTIFY #{type}"
+ 
+-    @socket.send http_notify, 0, @broadcast, @port
++    @usocket.send http_notify, 0, @broadcast, @port
+   end
+ 
+   ##
+@@ -699,13 +748,13 @@ USN: #{name}\r
+ 
+     log :debug, "SSDP sent byebye #{type}"
+ 
+-    @socket.send http_notify, 0, @broadcast, @port
++    @usocket.send http_notify, 0, @broadcast, @port
+   end
+ 
+   ##
+   # Builds and sends a response to an M-SEARCH request"
+ 
+-  def send_response(uri, type, name, device)
++  def send_response(uri, type, name, device, address, port)
+     server_info = "Ruby UPnP/#{UPnP::VERSION}"
+     device_info = "#{device.root_device.class}/#{device.root_device.version}"
+ 
+@@ -722,9 +771,9 @@ Content-Length: 0\r
+ \r
+     HTTP_RESPONSE
+ 
+-    log :debug, "SSDP sent M-SEARCH OK #{type}"
++    log :debug, "SSDP sent response OK #{type}"
+ 
+-    @socket.send http_response, 0, @broadcast, @port
++    @usocket.send http_response, 0, address, port
+   end
+ 
+   ##
+@@ -742,16 +791,18 @@ ST: #{search_target}\r
+ 
+     log :debug, "SSDP sent M-SEARCH #{search_target}"
+ 
+-    @socket.send search, 0, @broadcast, @port
++    @usocket.send search, 0, @broadcast, @port
+   end
+ 
+   ##
+   # Stops and clears the listen thread.
+ 
+   def stop_listening
+-    @listener.kill if @listener
++    @mlistener.kill if @mlistener
++    @ulistener.kill if @ulistener
+     @queue = Queue.new
+-    @listener = nil
++    @mlistener = nil
++    @ulistener = nil
+   end
+ 
+ end

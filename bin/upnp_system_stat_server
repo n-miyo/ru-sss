@@ -1,0 +1,8 @@
+#!/usr/bin/env ruby
+
+Thread.abort_on_exception = true
+
+require 'rubygems'
+require 'UPnP/device/system_stat_server'
+
+UPnP::Device::SystemStatServer.run
